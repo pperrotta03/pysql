@@ -34,24 +34,21 @@ class SelectionMenu(tk.Frame):
                 results.append(item)
         return results
     
-    def runProgram(self, fileName, args):
+    def runProgram(self, programName, args):
         if (len(args) < 1 or args[0] =='' or args[1] == ''):
             messagebox.showerror(title="Invalid Input", message="Please enter an output file name | Given: " + str(args[-1:]))
             return
-        procOutput = subprocess.run([os.path.join(os.getcwd(), self.sqlDirectory, fileName), args[0], args[1]], capture_output=True, text=True).stdout
-        self.showResult(procOutput)
+        procOutput = subprocess.run([os.path.join(os.getcwd(), programName), args[0],  args[1]], capture_output=True, text=True).stdout
+        self.showResult(procOutput, os.path.join('txt\\', args[1]))
 
     def getCurrentSqlSelection(self):
         return self.sqlSelection.get()
     
     def getCurrentSqlDirectory(self):
         return self.sqlDirectory
-
-    def setSqlSelection(self, item):
-        self.sqlSelection = item
     
     def touchFile(self, context):
-        Path(os.path.join(self.getCurrentSqlDirectory(), self.getCurrentSqlSelection())).touch()
+        Path(os.path.join(self.getCurrentSqlDirectory(), self.sqlSelection.get())).touch()
 
     def addItems(self):
         nextList = self.getFolderContent(self.sqlDirectory)
@@ -62,11 +59,15 @@ class SelectionMenu(tk.Frame):
         self.optionMenu = ttk.OptionMenu(self, self.sqlSelection, self.sqlDirContent[-1], *self.sqlDirContent, command=self.touchFile)
         self.optionMenu.grid(column=2, row=0)
 
-    def showResult(self, value):
+    def showResult(self, procValue, resultFileName):
         window = tk.Toplevel(self)
         window.title("SQL Ouput")
         window.geometry("500x500")
-        Label(window, text=value).pack()
+        tk.Label(window, text=procValue).pack()
+        resultValue = ''
+        with open(resultFileName, 'r') as file:
+            resultValue = file.read()
+        tk.Label(window, text=resultValue).pack(pady=20)
 
 
 class Notebook(tk.Frame):
@@ -97,9 +98,9 @@ class Notebook(tk.Frame):
         
         ttk.Button(frame, text="Refresh", command=self.refresh).pack(pady=20, padx=5)
         ttk.Button(frame, text="Save", command=self.update).pack(padx=5)
-        ttk.Button(frame, text="Close Tab", command=lambda: self.notebook.forget(self.notebook.select())).pack(side=tk.BOTTOM, padx=5, pady=15)
+        if (self.notebookIndex != 0):
+            ttk.Button(frame, text="Close Tab", command=lambda: self.notebook.forget(self.notebook.select())).pack(side=tk.BOTTOM, padx=5, pady=15)
         self.notebook.add(frame, text=title)
-
         self.notebookIndex += 1
 
     def refresh(self):
@@ -107,16 +108,18 @@ class Notebook(tk.Frame):
         self.textAreas[currentTab].delete(1.0, tk.END)
         fileList = glob.glob(self.sqlDirectory + '/*')
         latest = max(fileList, key=os.path.getmtime)
+        self.notebook.tab(currentTab, text=latest)
         fileContent = ''
         with open(latest, 'r') as file:
             fileContent = file.read()
         self.textAreas[currentTab].insert(tk.END, fileContent)
         
     def update(self):
+        currentTab = self.notebook.index(self.notebook.select())
         fileList = glob.glob(self.sqlDirectory + '/*')
         latest = max(fileList, key=os.path.getmtime)
         latestPath = os.path.abspath(latest)
-        payload = self.textArea.get("1.0", tk.END)
+        payload = self.textAreas[currentTab].get("1.0", tk.END)
         with open(latest, 'w') as file:
             file.write(payload)
 
@@ -153,8 +156,8 @@ class runSQL(tk.Tk):
         self.notebook.addTab(self.menu.getCurrentSqlSelection())
         self.menuBar = tk.Menu(self)
         self.fileMenu = tk.Menu(self.menuBar, tearoff=0)
-        self.menu.pack()
-        self.notebook.pack()
+        self.menu.pack(fill='both', expand=True, padx=20, pady=10)
+        self.notebook.pack(fill='both')
         self.fileMenu.add_command(label="New File", command=self.newFile)
         self.fileMenu.add_command(label="Sync List", command=self.menu.addItems)
         self.fileMenu.add_command(label="Search", command=self.notebook.searchTextArea)
@@ -163,6 +166,7 @@ class runSQL(tk.Tk):
         self.fileMenu.add_separator()
         self.menuBar.add_cascade(label="File", menu=self.fileMenu)
         self.config(menu=self.menuBar)
+        self.setIcon()
 
     def mainloop(self):
         self.root.mainloop()
@@ -177,10 +181,10 @@ class runSQL(tk.Tk):
     def newFile(self):
         fileName = askstring("New File", "Please enter a filename:")
         if not os.path.exists(os.path.join(os.getcwd(), self.sqlDirectory, fileName)):
-            with open(os.path.join(os.getcwd(), self.directory, fileName), 'w') as file:
+            with open(os.path.join(os.getcwd(), self.sqlDirectory, fileName), 'w') as file:
                 pass
         else:
-            messagebox.showerror(title="File Already Exists", message="Specify a new name as " + fileName + " already exists in " + self.directory)
+            messagebox.showerror(title="File Already Exists", message="Specify a new name as " + fileName + " already exists in " + self.sqlDirectory)
 
     def addTabUtility(self):
         title = self.menu.getCurrentSqlSelection()
