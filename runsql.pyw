@@ -52,7 +52,6 @@ class SelectionMenu(tk.Frame):
 
     def addItems(self):
         nextList = self.getFolderContent(self.sqlDirectory)
-        print(nextList)
         for item in nextList:
             if item not in self.sqlDirContent:
                 self.sqlDirContent.append(item)
@@ -64,6 +63,7 @@ class SelectionMenu(tk.Frame):
         window.title("SQL Ouput")
         window.geometry("500x500")
         tk.Label(window, text=procValue).pack()
+        
         resultValue = ''
         with open(resultFileName, 'r') as file:
             resultValue = file.read()
@@ -99,42 +99,54 @@ class Notebook(tk.Frame):
         ttk.Button(frame, text="Refresh", command=self.refresh).pack(pady=20, padx=5)
         ttk.Button(frame, text="Save", command=self.update).pack(padx=5)
         if (self.notebookIndex != 0):
-            ttk.Button(frame, text="Close Tab", command=lambda: self.notebook.forget(self.notebook.select())).pack(side=tk.BOTTOM, padx=5, pady=15)
-        self.notebook.add(frame, text=title)
+            ttk.Button(frame, text="Close Tab", command=self.closeTab).pack(side=tk.BOTTOM, padx=5, pady=15)
+        self.notebook.add(frame, text=title, underline=0)
         self.notebookIndex += 1
+
+    def closeTab(self):
+        self.notebook.forget(self.notebook.select())
+        self.notebookIndex -= 1
+        
 
     def refresh(self):
         currentTab = self.notebook.index(self.notebook.select())
+        if self.textAreas[currentTab].edit_modified():
+            answer = messagebox.askquestion("Updating Modified Text", "Are you sure you want to discard your changes? They will be LOST! Forever...")
+            if (answer.lower() != 'yes'):
+                return
         self.textAreas[currentTab].delete(1.0, tk.END)
         fileList = glob.glob(self.sqlDirectory + '/*')
         latest = max(fileList, key=os.path.getmtime)
-        self.notebook.tab(currentTab, text=latest)
+        self.notebook.tab(currentTab)
         fileContent = ''
         with open(latest, 'r') as file:
             fileContent = file.read()
         self.textAreas[currentTab].insert(tk.END, fileContent)
+            
         
     def update(self):
         currentTab = self.notebook.index(self.notebook.select())
-        fileList = glob.glob(self.sqlDirectory + '/*')
-        latest = max(fileList, key=os.path.getmtime)
-        latestPath = os.path.abspath(latest)
-        payload = self.textAreas[currentTab].get("1.0", tk.END)
-        with open(latest, 'w') as file:
-            file.write(payload)
+        if self.textAreas[currentTab].edit_modified():
+            fileList = glob.glob(self.sqlDirectory + '/*')
+            latest = max(fileList, key=os.path.getmtime)
+            latestPath = os.path.abspath(latest)
+            payload = self.textAreas[currentTab].get("1.0", tk.END)
+            with open(latest, 'w') as file:
+                file.write(payload)
 
     def searchTextArea(self):
+        currentTab = self.notebook.index(self.notebook.select())
         i = 0
         searchTerm = askstring("Search", "Enter search term:")
-        self.textArea.tag_remove('found', '1.0', tk.END)
+        self.textAreas[currentTab].tag_remove('found', '1.0', tk.END)
         while 1:
-            i = self.textArea.search(searchTerm, i, nocase=1, stopindex=tk.END)
+            i = self.textAreas[currentTab].search(searchTerm, i, nocase=1, stopindex=tk.END)
             if not i:
                 break
             lastI = '%s+%dc' % (i, len(searchTerm))
-            self.textArea.tag_add('found', i, lastI)
+            self.textAreas[currentTab].tag_add('found', i, lastI)
             i = lastI
-        self.textArea.tag_config('found', foreground='red')
+        self.textAreas[currentTab].tag_config('found', foreground='red')
         
     
 class runSQL(tk.Tk):
@@ -150,22 +162,29 @@ class runSQL(tk.Tk):
         self.grid_rowconfigure(0, weight=1)
         self.grid_columnconfigure(0, weight=1)
         self.grid_columnconfigure(1, weight=1)
+        
         self.geometry("800x600")
+        
         self.notebook = Notebook(self.rootFrame, 'sql')
         self.menu = SelectionMenu(self.rootFrame, 'sql')
         self.notebook.addTab(self.menu.getCurrentSqlSelection())
         self.menuBar = tk.Menu(self)
         self.fileMenu = tk.Menu(self.menuBar, tearoff=0)
+        
         self.menu.pack(fill='both', expand=True, padx=20, pady=10)
         self.notebook.pack(fill='both')
+        
         self.fileMenu.add_command(label="New File", command=self.newFile)
         self.fileMenu.add_command(label="Sync List", command=self.menu.addItems)
         self.fileMenu.add_command(label="Search", command=self.notebook.searchTextArea)
         self.fileMenu.add_command(label="New Tab", command=self.addTabUtility)
+        self.fileMenu.add_command(label="Save As", command=self.addTabUtility)
         self.fileMenu.add_command(label="Exit", command=self.endProgram)
+        
         self.fileMenu.add_separator()
         self.menuBar.add_cascade(label="File", menu=self.fileMenu)
         self.config(menu=self.menuBar)
+        
         self.setIcon()
 
     def mainloop(self):
@@ -176,7 +195,7 @@ class runSQL(tk.Tk):
         self.root.destroy()
 
     def setIcon(self):
-        self.iconbitmap(os.path.join(os.curdir, 'images/runsql.ico'))
+        self.iconbitmap(os.path.join(os.getcwd(), 'images/runsql.ico'))
 
     def newFile(self):
         fileName = askstring("New File", "Please enter a filename:")
