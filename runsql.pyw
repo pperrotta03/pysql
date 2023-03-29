@@ -63,13 +63,25 @@ class SelectionMenu(tk.Frame):
         window.title("SQL Ouput")
         window.geometry("500x500")
         tk.Label(window, text=procValue).pack()
+        resultTextArea = tk.Text(window, width=60, height=20, bg='#33ffff', font='Avenir', spacing1=2, wrap=tk.NONE,)
         
         resultValue = ''
         with open(resultFileName, 'r') as file:
             resultValue = file.read()
-        tk.Label(window, text=resultValue).pack(pady=20)
 
+        resultTextArea.insert(tk.INSERT, resultValue)
+        resultTextArea.config(state='disabled')
 
+        verticalScrollbar = ttk.Scrollbar(window)
+        horizontalScrollbar = ttk.Scrollbar(window, orient=tk.HORIZONTAL)
+        resultTextArea.config(yscrollcommand=verticalScrollbar.set, xscrollcommand=horizontalScrollbar.set)
+        horizontalScrollbar.config(command=resultTextArea.xview)
+        verticalScrollbar.config(command=resultTextArea.yview)
+        resultTextArea.pack()
+        horizontalScrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        verticalScrollbar.pack(side=tk.LEFT, fill=tk.Y)
+
+        
 class Notebook(tk.Frame):
     def __init__(self, master, sqlDirectory):
         super(Notebook, self).__init__()
@@ -195,7 +207,7 @@ class runSQL(tk.Tk):
         self.root.destroy()
 
     def setIcon(self):
-        self.iconbitmap(os.path.join(os.getcwd(), 'images/runsql.ico'))
+        self.iconbitmap(os.path.join(os.getcwd(), 'images\\runsql.ico'))
 
     def newFile(self):
         fileName = askstring("New File", "Please enter a filename:")
