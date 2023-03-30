@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 from tkinter.simpledialog import askstring
+from tkinter.filedialog import asksaveasfile
 from tkinter import ttk
 import subprocess
 import os
@@ -9,10 +10,13 @@ from pathlib import Path
 import glob
 import ctypes
 
+
 class SelectionMenu(tk.Frame):
     def __init__(self, master, sqlDirectory):
         super(SelectionMenu, self).__init__()
         self.master = master
+        self.serverName = tk.StringVar()
+        self.serverList = []
         self.sqlDirectory = sqlDirectory
         self.sqlSelection = tk.StringVar()
         self.outputSelection = tk.StringVar()
@@ -20,12 +24,15 @@ class SelectionMenu(tk.Frame):
         
     def createItems(self):
         self.sqlDirContent = self.getFolderContent(self.sqlDirectory)
-        ttk.Label(self, text="Output File").grid(column=1, row=1, padx=(10,0))
+        ttk.Label(self, text="Output File").grid(column=5, row=1, padx=(10,0))
         self.optionMenu = ttk.OptionMenu(self, self.sqlSelection, 'SQL Files', *self.sqlDirContent, command=self.touchFile)
-        self.optionMenu.grid(column=2, row=0)
+        self.optionMenu.grid(column=6, row=0)
         self.outputEntry = ttk.Entry(self, textvariable=self.outputSelection)
-        self.outputEntry.grid(column=2, row=1)
-        ttk.Button(self, text="Run", command=lambda: self.runProgram("runSQL.bat", [self.sqlSelection.get(), self.outputSelection.get()])).grid(column=0, row=0)
+        self.outputEntry.grid(column=6, row=1)
+        self.serverLabel = tk.Label(self, textvariable=self.serverName)
+        self.serverLabel.config(bg="grey25", fg="white")
+        self.serverListMenu = ttk.OptionMenu(self, self.serverName, 'Located Servers', *self.serverList)
+        ttk.Button(self, text="Run", command=lambda: self.runProgram('runSQL.bat', [self.serverName.get(), self.sqlSelection.get(), self.outputSelection.get()])).grid(column=7, row=5)
         
     def getFolderContent(self, directory):
         results = []
@@ -33,13 +40,20 @@ class SelectionMenu(tk.Frame):
             if (os.path.isfile(os.path.join(directory, item))):
                 results.append(item)
         return results
+
+    def validateSqlArgs(self, args):
+        if (len(args) < 1 or args[1] =='' or args[2] == ''):
+            messagebox.showerror(title="Invalid Input", message="Enter output file name")
+            return False
+        elif (args[0] == '') or (args[0] == "Located Servers"):
+            messagebox.showerror(title="Connect Server", message="Scan for nearby servers under the \"Server\" Menu")
+            return False
+        return True
     
     def runProgram(self, programName, args):
-        if (len(args) < 1 or args[0] =='' or args[1] == ''):
-            messagebox.showerror(title="Invalid Input", message="Please enter an output file name | Given: " + str(args[-1:]))
-            return
-        procOutput = subprocess.run([os.path.join(os.getcwd(), programName), args[0],  args[1]], capture_output=True, text=True).stdout
-        self.showResult(procOutput, os.path.join('txt\\', args[1]))
+        if (self.validateSqlArgs(args)):
+            procOutput = subprocess.run([os.path.join(os.getcwd(), programName), args[0],  args[1], args[2]], capture_output=True, text=True).stdout
+            self.showResult(procOutput, os.path.join('txt\\', args[2]))
 
     def getCurrentSqlSelection(self):
         return self.sqlSelection.get()
@@ -63,7 +77,7 @@ class SelectionMenu(tk.Frame):
         window.title("SQL Ouput")
         window.geometry("500x500")
         tk.Label(window, text=procValue).pack()
-        resultTextArea = tk.Text(window, width=60, height=20, bg='#33ffff', font='Avenir', spacing1=2, wrap=tk.NONE,)
+        resultTextArea = tk.Text(window, width=60, height=20, bg='#33ffff', font='Avenir', spacing1=2, wrap=tk.NONE)
         
         resultValue = ''
         with open(resultFileName, 'r') as file:
@@ -88,6 +102,7 @@ class Notebook(tk.Frame):
         self.master = master
         self.sqlDirectory = sqlDirectory
         self.notebook = ttk.Notebook(self)
+        self.notebook.enable_traversal()
         self.notebook.pack()
         self.textAreas = []
         self.notebookIndex = 0
@@ -129,11 +144,12 @@ class Notebook(tk.Frame):
         self.textAreas[currentTab].delete(1.0, tk.END)
         fileList = glob.glob(self.sqlDirectory + '/*')
         latest = max(fileList, key=os.path.getmtime)
-        self.notebook.tab(currentTab)
+        self.notebook.tab(currentTab, text=latest)
         fileContent = ''
         with open(latest, 'r') as file:
             fileContent = file.read()
         self.textAreas[currentTab].insert(tk.END, fileContent)
+        self.textAreas[currentTab].edit_modified(False)
             
         
     def update(self):
@@ -141,10 +157,15 @@ class Notebook(tk.Frame):
         if self.textAreas[currentTab].edit_modified():
             fileList = glob.glob(self.sqlDirectory + '/*')
             latest = max(fileList, key=os.path.getmtime)
-            latestPath = os.path.abspath(latest)
-            payload = self.textAreas[currentTab].get("1.0", tk.END)
             with open(latest, 'w') as file:
-                file.write(payload)
+                file.write(self.textAreas[currentTab].get("1.0", tk.END))
+
+    def saveAs(self):
+        currentTab = self.notebook.index(self.notebook.select())
+        saveAsFileName = asksaveasfile(initialfile=currentTab, defaultextension=".sql", filetypes=[("All Files","*.*"),("SQL File","*.sql")])
+        print(saveAsFileName.name)
+        with open(saveAsFileName.name, "w") as file:
+            file.write(self.textAreas[currentTab].get("1.0", tk.END))
 
     def searchTextArea(self):
         currentTab = self.notebook.index(self.notebook.select())
@@ -171,10 +192,6 @@ class runSQL(tk.Tk):
         self.wm_title("runSQL")
         self.rootFrame = tk.Frame(self)
         
-        self.grid_rowconfigure(0, weight=1)
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_columnconfigure(1, weight=1)
-        
         self.geometry("800x600")
         
         self.notebook = Notebook(self.rootFrame, 'sql')
@@ -183,21 +200,35 @@ class runSQL(tk.Tk):
         self.menuBar = tk.Menu(self)
         self.fileMenu = tk.Menu(self.menuBar, tearoff=0)
         
-        self.menu.pack(fill='both', expand=True, padx=20, pady=10)
-        self.notebook.pack(fill='both')
-        
         self.fileMenu.add_command(label="New File", command=self.newFile)
         self.fileMenu.add_command(label="Sync List", command=self.menu.addItems)
         self.fileMenu.add_command(label="Search", command=self.notebook.searchTextArea)
         self.fileMenu.add_command(label="New Tab", command=self.addTabUtility)
-        self.fileMenu.add_command(label="Save As", command=self.addTabUtility)
+        self.fileMenu.add_command(label="Save As", command=self.notebook.saveAs)
         self.fileMenu.add_command(label="Exit", command=self.endProgram)
-        
         self.fileMenu.add_separator()
         self.menuBar.add_cascade(label="File", menu=self.fileMenu)
-        self.config(menu=self.menuBar)
         
+        self.serverMenu = tk.Menu(self.menuBar, tearoff=0)
+        self.serverMenu.add_command(label="Find Local", command=self.findLocalServersSync)
+        self.serverMenu.add_separator()
+        self.menuBar.add_cascade(label="Server", menu=self.serverMenu)
+        
+        self.menu.pack(padx=20, pady=10)
+        self.notebook.pack()
+        self.config(menu=self.menuBar)
         self.setIcon()
+
+    def findLocalServersSync(self):
+        processObject = subprocess.run('sqlcmd -L', capture_output=True, text=True).stdout
+        results = []
+        for line in processObject.splitlines():
+            line = line.strip()
+            if not ((line == '') or (line == 'Servers:')):
+                results.append(line)
+        self.menu.serverList = results
+        self.menu.serverListMenu = ttk.OptionMenu(self.menu, self.menu.serverName, 'Located Servers', *self.menu.serverList)
+        self.menu.serverListMenu.grid(row=1, column=0)
 
     def mainloop(self):
         self.root.mainloop()
@@ -225,8 +256,8 @@ class runSQL(tk.Tk):
         self.notebook.addTab(title, content)
 
 if __name__ == "__main__":
-        app = runSQL('sql')
-        app.mainloop()
-        #https://stackoverflow.com/questions/1551605/how-to-set-applications-taskbar-icon-in-windows-7/1552105
-        appId = u'union.runSQL-1.0'
-        ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appId)
+    app = runSQL('sql')
+    app.mainloop()
+    #https://stackoverflow.com/questions/1551605/how-to-set-applications-taskbar-icon-in-windows-7/1552105
+    appId = u'union.runSQL-1.0'
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(appId)
