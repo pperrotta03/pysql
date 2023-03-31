@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 from tkinter.simpledialog import askstring
 from tkinter.filedialog import asksaveasfile
+from tkinter.simpledialog import Dialog
 from tkinter import ttk
 import subprocess
 import os
@@ -9,6 +10,150 @@ import time
 from pathlib import Path
 import glob
 import ctypes
+import json
+
+class SqlConfigPopup(tk.Toplevel):
+    def __init__(self, master, title='SQLCMD Arguments', width=400, height=400):
+        tk.Toplevel.__init__(self, master)
+        self.geometry(f'{width}x{height}')
+        self.config(bg='grey50')
+        self.master = master
+        self.rowsPerHeader = tk.IntVar()
+        self.printStatsStatus = tk.StringVar()
+        self.trailingSpacesStatus = tk.StringVar()
+        self.separator = tk.StringVar()
+        self.printStatsStatus.set('Off')
+        self.trailingSpacesStatus.set('Off')
+        self.separator.set(',')
+        self.configFile = os.path.join(os.getcwd(), 'config.data')
+        
+        self.sqlArguments = {'W':'Off','p':'Off','s':'","','h':'0'}
+        
+        self.createItems()
+        
+        if os.path.isfile(os.path.basename(self.configFile)):
+            with open(self.configFile, 'r') as file:
+                self.sqlArguments = json.loads(file.read())
+                try:
+                    self.rowsPerHeader.set(self.sqlArguments['h'])
+                    self.incrementRPHValue(0)
+                    self.trailingSpacesStatus.set(self.sqlArguments['W'])
+                    if self.sqlArguments['W'].lower() == 'on':
+                        self.trailingSpacesLabel.config(bg='green')
+                    self.separator.set(self.sqlArguments['s'])
+                    self.printStatsStatus.set(self.sqlArguments['p'])
+                    if self.sqlArguments['p'].lower() == 'on':
+                        self.printStatsLabel.config(bg='green')
+                except(KeyError):
+                    print(f'KeyError - key not stored in {self.configFile}')
+        
+    def createItems(self):
+        self.rphFrame = tk.Frame(self, bg='grey50')
+        self.printStatsFrame = tk.Frame(self, bg='grey50')
+        self.trailingSpacesFrame = tk.Frame(self, bg='grey50')
+        self.separatorFrame = tk.Frame(self, bg='grey50')
+        
+        self.incrementRPHButton = tk.Button(self.rphFrame, text='Up', font='system', command=lambda: self.incrementRPHValue(1))
+        self.decrementRPHButton = tk.Button(self.rphFrame, text='Down', font='system', command=lambda: self.incrementRPHValue(-1))
+        self.rphLabel = ttk.Label(self.rphFrame, text='-h | Rows Per Header', font='system')
+        self.currentRPHLabel = tk.Label(self.rphFrame, textvariable=self.rowsPerHeader, bg='green', font='system 18')
+        self.printStatsLabel = tk.Label(self.printStatsFrame, textvariable=self.printStatsStatus, bg='red', font='system 18')
+        self.printStatsButton = tk.Button(self.printStatsFrame, text='-p | Print Statistics', relief='sunken', font='system', command=self.togglePrintStats)
+        self.trailingSpacesLabel = tk.Label(self.trailingSpacesFrame, textvariable=self.trailingSpacesStatus, bg='red', font='system 18')
+        self.trailingSpacesButton = tk.Button(self.trailingSpacesFrame, text='-W | Remove Trailing Whitespaces', relief='sunken', font='system', command=self.toggleTrailingSpaces)
+        self.separatorLabel = tk.Label(self.separatorFrame, text='Separator', font='system')
+        self.currentSeparatorLabel = tk.Label(self.separatorFrame, textvariable=self.separator, bg='red', font='system 18')
+        self.separatorEntry = tk.Entry(self.separatorFrame, font='system 18', width=3)
+        self.separatorButton = tk.Button(self.separatorFrame, text='Set', font='system', command=self.setSeparator)
+        self.separatorEntry.insert(0, 'ie |,')
+        self.separatorEntry.bind("<FocusIn>", self.resetSeparatorLabel)
+        
+        self.rphFrame.grid_rowconfigure(0, weight=1)
+        
+        self.rphFrame.pack(anchor="w", expand=True, padx=20, pady=(20,0))
+        self.currentRPHLabel.grid(row=0, column=0, padx=5)
+        self.rphLabel.grid(row=0, column=1)
+        self.incrementRPHButton.grid(row=0, column=2, padx=10)
+        self.decrementRPHButton.grid(row=0, column=3)
+        
+        self.printStatsFrame.pack(anchor="w", expand=True, padx=20, pady=(5,5))
+        self.printStatsLabel.grid(row=0, column=0, padx=5)
+        self.printStatsButton.grid(row=0, column=1)
+
+        self.trailingSpacesFrame.pack(anchor="w", expand=True, padx=20, pady=(5,5))
+        self.trailingSpacesLabel.grid(row=0, column=0, padx=5)
+        self.trailingSpacesButton.grid(row=0, column=1)
+
+        self.separatorFrame.pack(anchor="w", expand=True, padx=20, pady=(5,5))
+        self.currentSeparatorLabel.grid(row=0, column=0, padx=5)
+        self.separatorEntry.grid(row=0, column=1, padx=5)
+        self.separatorLabel.grid(row=0, column=2, padx=5)
+        self.separatorButton.grid(row=0, column=3, padx=5)
+
+    def updateArg(self, key, value):
+        try:
+            self.sqlArguments[key] = value
+        except(KeyError):
+            print(f'KeyError: Updating {key} - does not exists in sqlArguments at this time')
+        with open(self.configFile, 'w') as file:
+            args = json.dumps(self.sqlArguments)
+            file.write(args)
+
+    def resetSeparatorLabel(self, context=None):
+        self.separatorEntry.delete(0, tk.END)
+
+    def setSeparator(self):
+        self.separator.set(self.separatorEntry.get()[:3].strip())
+        self.updateArg('s', '"' + self.separator.get() + '"')
+        
+
+    def toggleTrailingSpaces(self):
+        if self.trailingSpacesStatus.get().lower() == 'off':
+            self.sqlArguments['W'] = 'On'
+            self.trailingSpacesButton.config(relief='raised')
+            self.trailingSpacesStatus.set('On')
+            self.trailingSpacesLabel.config(bg='green')
+        else:
+            self.trailingSpacesButton.config(relief='sunken')
+            try:
+                del self.sqlArguments['W']
+            except(KeyError):
+                print('Key Error: "W"')
+            self.trailingSpacesStatus.set('Off')
+            self.trailingSpacesLabel.config(bg='red')
+        self.updateArg('W', self.trailingSpacesStatus.get())
+
+    def togglePrintStats(self):
+        if self.printStatsStatus.get().lower() == 'off':
+            self.sqlArguments['p'] = 'On'
+            self.printStatsButton.config(relief='raised')
+            self.printStatsStatus.set('On')
+            self.printStatsLabel.config(bg='green')
+        else:
+            self.printStatsButton.config(relief='sunken')
+            try:
+                del self.sqlArguments['p']
+            except(KeyError):
+                print('Key Error: "p"')
+            self.printStatsStatus.set('Off')
+            self.printStatsLabel.config(bg='red')
+        self.updateArg('p', self.printStatsStatus.get())
+        
+    def __repr__(self):
+        return str(type(self))
+
+    def __str__(self):
+        return str(self.sqlArguments)
+
+    def incrementRPHValue(self, byValue):
+        result = self.rowsPerHeader.get() + byValue
+        if (result < 0):
+            result = -1
+            self.currentRPHLabel.config(bg='red')
+        else:
+            self.currentRPHLabel.config(bg='green')
+        self.rowsPerHeader.set(result)
+        self.updateArg('h', self.rowsPerHeader.get())
 
 
 class SelectionMenu(tk.Frame):
@@ -20,11 +165,12 @@ class SelectionMenu(tk.Frame):
         self.sqlDirectory = sqlDirectory
         self.sqlSelection = tk.StringVar()
         self.outputSelection = tk.StringVar()
+        self.sqlcmdArgs = {}
         self.createItems()
         
     def createItems(self):
         self.sqlDirContent = self.getFolderContent(self.sqlDirectory)
-        ttk.Label(self, text="Output File").grid(column=5, row=1, padx=(10,0))
+        ttk.Label(self, text='Output File').grid(column=5, row=1, padx=(10,0))
         self.optionMenu = ttk.OptionMenu(self, self.sqlSelection, 'SQL Files', *self.sqlDirContent, command=self.touchFile)
         self.optionMenu.grid(column=6, row=0)
         self.outputEntry = ttk.Entry(self, textvariable=self.outputSelection)
@@ -32,7 +178,7 @@ class SelectionMenu(tk.Frame):
         self.serverLabel = tk.Label(self, textvariable=self.serverName)
         self.serverLabel.config(bg="grey25", fg="white")
         self.serverListMenu = ttk.OptionMenu(self, self.serverName, 'Located Servers', *self.serverList)
-        ttk.Button(self, text="Run", command=lambda: self.runProgram('runSQL.bat', [self.serverName.get(), self.sqlSelection.get(), self.outputSelection.get()])).grid(column=7, row=5)
+        ttk.Button(self, text='Run', command=self.runProgram).grid(column=7, row=5, padx=50)
         
     def getFolderContent(self, directory):
         results = []
@@ -41,19 +187,27 @@ class SelectionMenu(tk.Frame):
                 results.append(item)
         return results
 
-    def validateSqlArgs(self, args):
-        if (len(args) < 1 or args[1] =='' or args[2] == ''):
-            messagebox.showerror(title="Invalid Input", message="Enter output file name")
+    def validateSqlArgs(self):
+        if (self.outputSelection.get() == ''):
+            messagebox.showerror(title='Invalid Input', message='Enter output file name')
             return False
-        elif (args[0] == '') or (args[0] == "Located Servers"):
-            messagebox.showerror(title="Connect Server", message="Scan for nearby servers under the \"Server\" Menu")
+        elif (self.serverName.get() == '') or (self.serverName.get() == 'Located Servers'):
+            messagebox.showerror(title='Connect Server', message='Scan for nearby servers under the "Server" Menu')
             return False
         return True
     
-    def runProgram(self, programName, args):
-        if (self.validateSqlArgs(args)):
-            procOutput = subprocess.run([os.path.join(os.getcwd(), programName), args[0],  args[1], args[2]], capture_output=True, text=True).stdout
-            self.showResult(procOutput, os.path.join('txt\\', args[2]))
+    def runProgram(self):
+        if (self.validateSqlArgs()):
+            command = f'sqlcmd -S {self.serverName.get()} -i "{os.path.join(os.getcwd(), "sql", self.sqlSelection.get())}" -o "{os.path.join(os.getcwd(), "txt", self.outputSelection.get())}"'
+            for key in self.sqlcmdArgs:
+                value = self.sqlcmdArgs[key]
+                if value == 'Off':
+                    continue
+                if (key == 'p') or (key == 'W'):
+                    value = ''
+                command = f'{command} -{key} {value}'
+            procOutput = subprocess.run(command)
+            self.showResult(procOutput, os.path.join("txt", self.outputSelection.get()))
 
     def getCurrentSqlSelection(self):
         return self.sqlSelection.get()
@@ -77,7 +231,8 @@ class SelectionMenu(tk.Frame):
         window.title("SQL Ouput")
         window.geometry("500x500")
         tk.Label(window, text=procValue).pack()
-        resultTextArea = tk.Text(window, width=60, height=20, bg='#33ffff', font='Avenir', spacing1=2, wrap=tk.NONE)
+        textFrame = tk.Frame(window, bg='grey50')
+        resultTextArea = tk.Text(textFrame, width=60, height=20, bg='#33ffff', font='Avenir', spacing1=2, wrap=tk.NONE)
         
         resultValue = ''
         with open(resultFileName, 'r') as file:
@@ -86,14 +241,16 @@ class SelectionMenu(tk.Frame):
         resultTextArea.insert(tk.INSERT, resultValue)
         resultTextArea.config(state='disabled')
 
-        verticalScrollbar = ttk.Scrollbar(window)
-        horizontalScrollbar = ttk.Scrollbar(window, orient=tk.HORIZONTAL)
+        verticalScrollbar = ttk.Scrollbar(textFrame)
+        horizontalScrollbar = ttk.Scrollbar(textFrame, orient=tk.HORIZONTAL)
+
+        textFrame.pack()
         resultTextArea.config(yscrollcommand=verticalScrollbar.set, xscrollcommand=horizontalScrollbar.set)
         horizontalScrollbar.config(command=resultTextArea.xview)
         verticalScrollbar.config(command=resultTextArea.yview)
-        resultTextArea.pack()
         horizontalScrollbar.pack(side=tk.BOTTOM, fill=tk.X)
         verticalScrollbar.pack(side=tk.LEFT, fill=tk.Y)
+        resultTextArea.pack(side=tk.RIGHT)
 
         
 class Notebook(tk.Frame):
@@ -116,7 +273,7 @@ class Notebook(tk.Frame):
         self.horizontalScrollbar.config(command=self.textAreas[-1].xview)
         self.verticalScrollbar.config(command=self.textAreas[-1].yview)
         self.horizontalScrollbar.pack(side=tk.BOTTOM, fill=tk.X)
-        self.verticalScrollbar.pack(side=tk.LEFT, fill=tk.Y)
+        self.verticalScrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.textAreas[-1].pack(side=tk.LEFT, padx=5, pady=3)
         self.textAreas[-1].focus()
 
@@ -163,15 +320,19 @@ class Notebook(tk.Frame):
     def saveAs(self):
         currentTab = self.notebook.index(self.notebook.select())
         saveAsFileName = asksaveasfile(initialfile=currentTab, defaultextension=".sql", filetypes=[("All Files","*.*"),("SQL File","*.sql")])
-        print(saveAsFileName.name)
         with open(saveAsFileName.name, "w") as file:
             file.write(self.textAreas[currentTab].get("1.0", tk.END))
 
     def searchTextArea(self):
         currentTab = self.notebook.index(self.notebook.select())
-        i = 0
-        searchTerm = askstring("Search", "Enter search term:")
-        self.textAreas[currentTab].tag_remove('found', '1.0', tk.END)
+        i = '1.0'
+        while True:
+            searchTerm = askstring("Search", "Enter search term:")
+            if searchTerm != '':
+                continue
+            break
+            
+        self.clearSearchTags()
         while 1:
             i = self.textAreas[currentTab].search(searchTerm, i, nocase=1, stopindex=tk.END)
             if not i:
@@ -179,7 +340,11 @@ class Notebook(tk.Frame):
             lastI = '%s+%dc' % (i, len(searchTerm))
             self.textAreas[currentTab].tag_add('found', i, lastI)
             i = lastI
-        self.textAreas[currentTab].tag_config('found', foreground='red')
+        self.textAreas[currentTab].tag_config('found', background='grey60')
+
+    def clearSearchTags(self):
+        currentTab = self.notebook.index(self.notebook.select())
+        self.textAreas[currentTab].tag_remove('found', '1.0', tk.END)
         
     
 class runSQL(tk.Tk):
@@ -203,15 +368,17 @@ class runSQL(tk.Tk):
         self.fileMenu.add_command(label="New File", command=self.newFile)
         self.fileMenu.add_command(label="Sync List", command=self.menu.addItems)
         self.fileMenu.add_command(label="Search", command=self.notebook.searchTextArea)
+        self.fileMenu.add_command(label="Reset Search", command=self.notebook.clearSearchTags)
         self.fileMenu.add_command(label="New Tab", command=self.addTabUtility)
         self.fileMenu.add_command(label="Save As", command=self.notebook.saveAs)
-        self.fileMenu.add_command(label="Exit", command=self.endProgram)
         self.fileMenu.add_separator()
+        self.fileMenu.add_command(label="Exit", command=self.endProgram)
         self.menuBar.add_cascade(label="File", menu=self.fileMenu)
         
         self.serverMenu = tk.Menu(self.menuBar, tearoff=0)
-        self.serverMenu.add_command(label="Find Local", command=self.findLocalServersSync)
+        self.serverMenu.add_command(label="Find Instances", command=self.findLocalServersSync)
         self.serverMenu.add_separator()
+        self.serverMenu.add_command(label="Configure SQLCMD", command=self.sqlConfigPopupWindow)
         self.menuBar.add_cascade(label="Server", menu=self.serverMenu)
         
         self.menu.pack(padx=20, pady=10)
@@ -219,15 +386,20 @@ class runSQL(tk.Tk):
         self.config(menu=self.menuBar)
         self.setIcon()
 
+    def sqlConfigPopupWindow(self):
+        self.sqlConfigPopup = SqlConfigPopup(self.rootFrame)
+        self.sqlConfigPopup.wait_window()
+        self.menu.sqlcmdArgs = self.sqlConfigPopup.sqlArguments
+
     def findLocalServersSync(self):
-        processObject = subprocess.run('sqlcmd -L', capture_output=True, text=True).stdout
+        processOutput = subprocess.run('sqlcmd -Lc', capture_output=True, text=True).stdout
         results = []
-        for line in processObject.splitlines():
+        for line in processOutput.splitlines():
             line = line.strip()
-            if not ((line == '') or (line == 'Servers:')):
-                results.append(line)
+            results.append(line)
         self.menu.serverList = results
-        self.menu.serverListMenu = ttk.OptionMenu(self.menu, self.menu.serverName, 'Located Servers', *self.menu.serverList)
+        self.menu.serverListMenu = tk.OptionMenu(self.menu, self.menu.serverName, *self.menu.serverList)
+        self.menu.serverListMenu.config(bg='grey75')
         self.menu.serverListMenu.grid(row=1, column=0)
 
     def mainloop(self):
