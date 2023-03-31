@@ -223,8 +223,9 @@ class SelectionMenu(tk.Frame):
         for item in nextList:
             if item not in self.sqlDirContent:
                 self.sqlDirContent.append(item)
+        self.optionMenu.forget()
         self.optionMenu = ttk.OptionMenu(self, self.sqlSelection, self.sqlDirContent[-1], *self.sqlDirContent, command=self.touchFile)
-        self.optionMenu.grid(column=2, row=0)
+        self.optionMenu.grid(column=6, row=0)
 
     def showResult(self, procValue, resultFileName):
         window = tk.Toplevel(self)
@@ -329,8 +330,7 @@ class Notebook(tk.Frame):
         while True:
             searchTerm = askstring("Search", "Enter search term:")
             if searchTerm != '':
-                continue
-            break
+                break
             
         self.clearSearchTags()
         while 1:
